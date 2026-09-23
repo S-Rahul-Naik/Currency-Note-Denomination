@@ -28,7 +28,7 @@ export interface VoiceSettings {
   repeatResult: boolean;
   vibration: boolean;
   favoriteVoiceId: string | null;
-  /** Opt-in only: render Kannada as Latin phonetic text when falling back to device voice. */
+  /** Opt-in only: render Kannada as Latin phonetic text. */
   romanizedFallback: boolean;
 }
 

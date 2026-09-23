@@ -4,17 +4,12 @@ import {
   ScanLine,
   Repeat,
   History as HistoryIcon,
-  Volume2,
-  Wifi,
-  WifiOff,
-  Cpu,
   ChevronRight,
-  Sparkles,
-  BarChart2,
   ArrowRight,
   CheckCircle2,
   AlertTriangle,
   XCircle,
+  Sparkles,
   ShieldCheck,
   ShieldAlert,
   ShieldX,
@@ -27,20 +22,19 @@ import { StatusPill } from "@/components/base/StatusPill";
 import { useApp } from "@/context/AppProvider";
 import { useVoice } from "@/context/VoiceProvider";
 import { getCurrency, formatAmount } from "@/constants/currencies";
-import { MOCK_HISTORY } from "@/mocks/history";
-import { isOpenScanCommand, listenForVoiceCommand } from "@/services/voice/voiceCommands";
-import type { DetectionStatus } from "@/types";
+import { isOpenScanCommand, startContinuousVoiceCommand } from "@/services/voice/voiceCommands";
+import type { DetectionRecord, DetectionStatus } from "@/types";
 
 // ─── Today’s Stats Banner ───────────────────────────────────────────────────
 
-function TodayStatsBanner() {
+function TodayStatsBanner({ history }: { history: DetectionRecord[] }) {
   const navigate = useNavigate();
 
   const stats = useMemo(() => {
-    if (MOCK_HISTORY.length === 0) return null;
+    if (history.length === 0) return null;
     // Find the most recent date in history — treat as "today" for demo
-    const mostRecent = MOCK_HISTORY.map((r) => r.createdAt.slice(0, 10)).sort().reverse()[0];
-    const todayItems = MOCK_HISTORY.filter((r) => r.createdAt.startsWith(mostRecent));
+    const mostRecent = history.map((r) => r.createdAt.slice(0, 10)).sort().reverse()[0];
+    const todayItems = history.filter((r) => r.createdAt.startsWith(mostRecent));
     if (todayItems.length === 0) return null;
 
     const regularScans = todayItems.filter((r) => r.source !== "counterfeit_check");
@@ -56,7 +50,7 @@ function TodayStatsBanner() {
       flaggedCount: flagged.length,
       flaggedVerdict: flagged[0]?.counterfeitVerdict ?? null,
     };
-  }, []);
+  }, [history]);
 
   if (!stats) return null;
 
@@ -181,9 +175,9 @@ function statusVisuals(status: DetectionStatus): {
   }
 }
 
-function RecentDetections() {
+function RecentDetections({ history }: { history: DetectionRecord[] }) {
   const navigate = useNavigate();
-  const recent = MOCK_HISTORY.slice(0, 3);
+  const recent = history.slice(0, 3);
 
   if (recent.length === 0) return null;
 
@@ -262,34 +256,12 @@ function RecentDetections() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface StatusRow {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  tone: "ok" | "warn" | "off" | "info";
-}
-
 export default function Home() {
   const navigate = useNavigate();
-  const { preferences } = useApp();
-  const { supported, selectedVoice, settings, speak } = useVoice();
-  const greeted = useRef(false);
-  const commandListening = useRef(false);
+  const { preferences, history } = useApp();
+  const { settings } = useVoice();
 
   useEffect(() => {
-    if (greeted.current) return;
-    greeted.current = true;
-    const listenForScanCommand = async () => {
-      if (commandListening.current) return;
-      commandListening.current = true;
-      if (settings.autoSpeak) {
-        await speak("Home. Say hey, open scan currency, to start scanning.", "confirmation");
-      }
-      const command = await listenForVoiceCommand("en-IN", 15000);
-      commandListening.current = false;
-      if (isOpenScanCommand(command)) navigate("/scan");
-    };
-    void listenForScanCommand();
     if (settings.vibration) {
       try {
         navigator.vibrate?.([60, 60, 60]);
@@ -297,9 +269,20 @@ export default function Home() {
         /* ignore */
       }
     }
-  }, [navigate, settings.autoSpeak, settings.vibration, speak]);
+    let listening = true;
+    const stopListening = startContinuousVoiceCommand("en-IN", (command) => {
+      if (listening && isOpenScanCommand(command)) {
+        listening = false;
+        stopListening();
+        navigate("/scan");
+      }
+    });
+    return () => {
+      listening = false;
+      stopListening();
+    };
+  }, [navigate, settings.vibration]);
 
-  const online = window.navigator.onLine;
   const currency = getCurrency(preferences.detectionCurrency);
   const modeLabel =
     preferences.detectionMode === "single"
@@ -307,27 +290,6 @@ export default function Home() {
       : preferences.detectionMode === "multiple"
         ? "Multiple"
         : "Automatic";
-
-  const statusRows: StatusRow[] = [
-    {
-      icon: Volume2,
-      label: "Voice",
-      value: supported ? `${selectedVoice.name} · ${selectedVoice.family}` : "Not supported",
-      tone: supported ? "ok" : "off",
-    },
-    {
-      icon: online ? Wifi : WifiOff,
-      label: "Network",
-      value: online ? "Online" : "Offline",
-      tone: online ? "ok" : "warn",
-    },
-    {
-      icon: Cpu,
-      label: "AI Model",
-      value: preferences.offlineModel ? "Offline · On-device" : "Online (demo)",
-      tone: preferences.offlineModel ? "info" : "off",
-    },
-  ];
 
   return (
     <MainLayout>
@@ -390,58 +352,8 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Status indicators */}
-          <section aria-label="System status" className="grid grid-cols-3 gap-2.5 sm:gap-3">
-            {statusRows.map((row) => {
-              const Icon = row.icon;
-              const dotColor =
-                row.tone === "ok"
-                  ? "bg-primary-500"
-                  : row.tone === "warn"
-                    ? "bg-accent-500"
-                    : row.tone === "info"
-                      ? "bg-secondary-500"
-                      : "bg-background-400";
-              const iconBg =
-                row.tone === "ok"
-                  ? "bg-primary-50 text-primary-700"
-                  : row.tone === "warn"
-                    ? "bg-accent-50 text-accent-800"
-                    : row.tone === "info"
-                      ? "bg-secondary-50 text-secondary-700"
-                      : "bg-background-100 text-foreground-600";
-              return (
-                <div key={row.label} className="surface flex flex-col gap-2.5 overflow-hidden rounded-2xl p-3.5 sm:p-4">
-                  {/* Icon + status dot row */}
-                  <div className="flex items-center justify-between">
-                    <span aria-hidden="true" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:h-10 sm:w-10 ${iconBg}`}>
-                      <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
-                    </span>
-                    <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dotColor}`} />
-                  </div>
-                  {/* Text */}
-                  <div className="min-w-0">
-                    <p className="truncate text-[10px] font-medium text-foreground-500 sm:text-xs">{row.label}</p>
-                    <p className="truncate text-xs font-bold text-foreground-950 sm:text-sm">{row.value}</p>
-                  </div>
-                  {/* Pill — hidden on mobile, visible on sm+ */}
-                  <div className="hidden sm:block">
-                    <StatusPill
-                      icon={<span aria-hidden="true" className="h-2 w-2 rounded-full bg-current" />}
-                      label={row.tone === "ok" ? "Ready" : row.tone === "warn" ? "Check" : "Info"}
-                      tone={row.tone}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </section>
-
-          {/* Today's stats banner */}
-          <TodayStatsBanner />
-
           {/* Recent detections */}
-          <RecentDetections />
+          <RecentDetections history={history} />
         </div>
 
         {/* Right column */}
@@ -468,34 +380,6 @@ export default function Home() {
             <ChevronRight aria-hidden="true" className="h-5 w-5 shrink-0 text-foreground-400" />
           </button>
 
-          {/* Quick actions */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => navigate("/convert")}
-              className="surface group flex cursor-pointer flex-col gap-3 rounded-2xl p-4 transition-colors hover:bg-background-100"
-            >
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary-100 text-secondary-700 transition-colors group-hover:bg-secondary-200">
-                <Repeat aria-hidden="true" className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-sm font-bold text-foreground-950">Converter</p>
-                <p className="text-xs text-foreground-500">Exchange rates</p>
-              </div>
-            </button>
-            <button
-              onClick={() => navigate("/history")}
-              className="surface group flex cursor-pointer flex-col gap-3 rounded-2xl p-4 transition-colors hover:bg-background-100"
-            >
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-100 text-accent-800 transition-colors group-hover:bg-accent-200">
-                <HistoryIcon aria-hidden="true" className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-sm font-bold text-foreground-950">History</p>
-                <p className="text-xs text-foreground-500">Past scans</p>
-              </div>
-            </button>
-          </div>
-
           {/* Counterfeit Check feature card */}
           <button
             onClick={() => navigate("/scan/counterfeit")}
@@ -516,21 +400,6 @@ export default function Home() {
             </div>
           </button>
 
-          {/* Analytics teaser — desktop only */}
-          <button
-            onClick={() => navigate("/history")}
-            className="surface hidden w-full cursor-pointer items-start gap-4 rounded-2xl p-5 transition-colors hover:bg-background-100 lg:flex"
-            aria-label="View detection analytics"
-          >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700">
-              <BarChart2 aria-hidden="true" className="h-5 w-5" />
-            </span>
-            <div className="min-w-0 flex-1 text-left">
-              <p className="text-sm font-bold text-foreground-950">Detection Analytics</p>
-              <p className="mt-0.5 text-xs text-foreground-500">Success rate, confidence trends, currency breakdown.</p>
-            </div>
-            <ArrowRight aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-foreground-400" />
-          </button>
         </div>
       </div>
     </MainLayout>

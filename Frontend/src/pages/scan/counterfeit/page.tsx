@@ -20,6 +20,7 @@ import { useApp } from "@/context/AppProvider";
 import { useVoice } from "@/context/VoiceProvider";
 import { getCurrency } from "@/constants/currencies";
 import { runCounterfeitCheck, getLocalizedLabel } from "@/services/counterfeit/counterfeitService";
+import { checkResultMessage, verdictMessage, voiceMessage } from "@/services/voice/voiceMessages";
 import { ReportSheet } from "@/pages/scan/counterfeit/ReportSheet";
 import type { CounterfeitResult, SecurityCheck } from "@/types";
 
@@ -71,7 +72,7 @@ export default function CounterfeitCheck() {
   const streamRef = useRef<MediaStream | null>(null);
   const spokenCount = useRef(0);
 
-  const { preferences } = useApp();
+  const { preferences, addHistoryRecord } = useApp();
   const { speak } = useVoice();
 
   const [phase, setPhase] = useState<Phase>("idle");
@@ -94,7 +95,7 @@ export default function CounterfeitCheck() {
         streamRef.current = stream;
         if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
         setCamReady(true);
-        speak("Camera ready. Align the note inside the frame and tap Analyse.", "normal");
+        speak(voiceMessage("cameraReady", preferences.voice.language), "normal", preferences.voice.language);
       } catch { if (!cancelled) setCamError(true); }
     })();
     return () => { cancelled = true; streamRef.current?.getTracks().forEach((t) => t.stop()); };
@@ -122,14 +123,10 @@ export default function CounterfeitCheck() {
     const voiceLang = preferences.voice.language ?? "en-IN";
     const localLabel = getLocalizedLabel(check.id, voiceLang, check.label);
 
-    const word =
-      check.result === "pass"      ? "passed" :
-      check.result === "uncertain" ? "uncertain" :
-      "failed";
     const tone =
       check.result === "fail"      ? "attention" :
       check.result === "uncertain" ? "warning"   : "normal";
-    speak(`${localLabel}. ${word}.`, tone);
+    speak(checkResultMessage(localLabel, check.result, voiceLang), tone, voiceLang);
   }, [result, revealedCount, phase, speak, preferences.voice.language]);
 
   // ── Voice: final verdict after all checks are revealed ──
@@ -143,13 +140,9 @@ export default function CounterfeitCheck() {
     const total  = result.checks.length;
 
     const t = setTimeout(() => {
-      const msg =
-        result.verdict === "authentic"
-          ? `All ${total} checks complete. Note appears authentic. ${passes} features verified. ${pct} percent confidence.`
-          : result.verdict === "suspicious"
-          ? `Analysis complete. Note is suspicious. Please verify with a bank. ${pct} percent confidence.`
-          : `Warning. ${fails} checks failed. Note may be counterfeit. ${pct} percent confidence. Do not accept this note.`;
-      speak(msg, result.verdict === "counterfeit" ? "attention" : "confirmation");
+      const voiceLang = preferences.voice.language ?? "en-IN";
+      const msg = verdictMessage(result.verdict, total, passes, fails, pct, voiceLang);
+      speak(msg, result.verdict === "counterfeit" ? "attention" : "confirmation", voiceLang);
     }, 900);
 
     return () => clearTimeout(t);
@@ -160,11 +153,21 @@ export default function CounterfeitCheck() {
     if (!camReady || phase !== "idle") return;
     spokenCount.current = 0;
     setPhase("scanning");
-    speak("Scanning. Please hold the note steady.", "normal");
+    speak(voiceMessage("scanning", preferences.voice.language), "normal", preferences.voice.language);
     await new Promise((r) => setTimeout(r, 700));
     setPhase("analyzing");
-    speak("Analysing security features. Please wait.", "normal");
+    speak(voiceMessage("analysing", preferences.voice.language), "normal", preferences.voice.language);
     const data = await runCounterfeitCheck(preferences.detectionCurrency, 500);
+    await addHistoryRecord({
+      id: crypto.randomUUID(),
+      currency: data.currency,
+      denomination: data.denomination,
+      confidence: data.overallConfidence,
+      status: "success",
+      source: "counterfeit_check",
+      counterfeitVerdict: data.verdict,
+      createdAt: new Date().toISOString(),
+    });
     setResult(data);
     setRevealedCount(0);
     setPhase("result");

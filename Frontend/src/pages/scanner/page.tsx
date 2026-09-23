@@ -24,6 +24,7 @@ import { useVoice } from "@/context/VoiceProvider";
 import { getCurrency } from "@/constants/currencies";
 import { runInference } from "@/services/inference/inferenceService";
 import { buildResultSpeechForVoice } from "@/services/inference/resultSpeech";
+import { modeMessage, statusMessage, voiceMessage } from "@/services/voice/voiceMessages";
 import type { DetectionMode } from "@/types";
 
 type CamState = "idle" | "requesting" | "active" | "denied" | "secure" | "error";
@@ -44,7 +45,7 @@ export default function Scanner() {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const { preferences, setLastResult, updatePreferences } = useApp();
+  const { preferences, setLastResult, addHistoryRecord, updatePreferences } = useApp();
   const { speak, settings, hasKannadaEngineVoice, isSpeaking } = useVoice();
 
   const [camState, setCamState] = useState<CamState>("idle");
@@ -98,12 +99,12 @@ export default function Scanner() {
     setCamState("requesting");
     if (!window.isSecureContext) {
       setCamState("secure");
-      speak("Camera requires HTTPS. Open the secure HTTPS address shown by the developer server.", "attention");
+      speak(voiceMessage("cameraHttps", settings.language), "attention", settings.language);
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia) {
       setCamState("error");
-      speak("Camera is not available on this device.", "attention");
+      speak(voiceMessage("cameraUnavailable", settings.language), "attention", settings.language);
       return;
     }
     try {
@@ -113,24 +114,22 @@ export default function Scanner() {
       });
       streamRef.current = stream;
       setCamState("active");
-      speak("Camera ready. Place the note in the guide and tap Scan.", "normal");
+      speak(voiceMessage("cameraReady", settings.language), "normal", settings.language);
     } catch {
       setCamState("denied");
-      speak(
-        "Camera permission was denied. Enable camera in settings and try again.",
-        "attention",
-      );
+      speak(voiceMessage("cameraDenied", settings.language), "attention", settings.language);
     }
   };
 
   const toggleFlash = () => {
     setFlash((f) => !f);
-    speak(flash ? "Flashlight off." : "Flashlight on.", "confirmation");
+    const message = flash ? "Flashlight off." : "Flashlight on.";
+    speak(statusMessage(message, settings.language), "confirmation", settings.language);
   };
 
   const setMode = (m: DetectionMode) => {
     updatePreferences({ detectionMode: m });
-    speak(`Mode changed to ${MODE_LABELS[m]}.`, "confirmation");
+    speak(modeMessage(m, settings.language), "confirmation", settings.language);
   };
 
   const doScan = useCallback(async (automatic = false) => {
@@ -142,7 +141,7 @@ export default function Scanner() {
     if (automatic) autoCaptureBusyRef.current = true;
     setScanning(true);
     setGuideText(automatic ? "Note found. Checking clarity…" : "Scanning… please hold steady.");
-    if (!automatic) speak("Scanning. Please hold steady.", "normal");
+    if (!automatic) speak(voiceMessage("scanning", settings.language), "normal", settings.language);
     try {
       const { result } = await runInference(preferences, videoRef.current ?? undefined);
       const confidence = result.currencies[0]?.confidence ?? 0;
@@ -152,6 +151,18 @@ export default function Scanner() {
         return;
       }
       setLastResult(result);
+      const note = result.currencies[0];
+      if (note) {
+        await addHistoryRecord({
+          id: crypto.randomUUID(),
+          currency: note.currency,
+          denomination: note.denomination,
+          confidence: note.confidence,
+          status: result.status,
+          source: "camera",
+          createdAt: new Date().toISOString(),
+        });
+      }
       const ann = buildResultSpeechForVoice(
         result,
         settings.language,
@@ -166,7 +177,7 @@ export default function Scanner() {
       setScanning(false);
       autoCaptureBusyRef.current = false;
     }
-  }, [hasKannadaEngineVoice, navigate, preferences, scanning, settings, setLastResult, speak]);
+  }, [addHistoryRecord, hasKannadaEngineVoice, navigate, preferences, scanning, settings, setLastResult, speak]);
 
   useEffect(() => {
     if (!preferences.autoScan || camState !== "active") return;

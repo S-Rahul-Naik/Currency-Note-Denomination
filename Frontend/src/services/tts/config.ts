@@ -6,17 +6,13 @@
  * Edge Function) that holds the real secret. The frontend only knows the
  * public function URL, derived from the connected backend project URL.
  *
- * Active AI engine selection (honest, explicit):
- *  - ElevenLabs is the PRIMARY AI provider when it is enabled + endpoint up.
- *  - Google Cloud TTS remains a secondary AI provider.
- *  - Device/browser TTS is the honest fallback.
+ * ElevenLabs is the only active voice engine.
  */
 
 function env(): {
   supabaseUrl: string;
   ttsEndpoint: string;
   elevenEnabled: string;
-  googleEnabled: string;
 } {
   return {
     supabaseUrl:
@@ -25,8 +21,6 @@ function env(): {
       (import.meta.env.VITE_PUBLIC_TTS_ENDPOINT as string | undefined) ?? "",
     elevenEnabled:
       (import.meta.env.VITE_PUBLIC_ELEVENLABS_TTS_ENABLED as string | undefined) ?? "",
-    googleEnabled:
-      (import.meta.env.VITE_PUBLIC_GOOGLE_TTS_ENABLED as string | undefined) ?? "",
   };
 }
 
@@ -43,15 +37,6 @@ export function isElevenLabsConfigured(): boolean {
   const url = getTTSFunctionUrl();
   if (!url) return false;
   if (e.elevenEnabled === "false") return false;
-  return true;
-}
-
-/** Whether the Google Cloud AI TTS path is configured. */
-export function isGoogleTTSConfigured(): boolean {
-  const e = env();
-  const url = getTTSFunctionUrl();
-  if (!url) return false;
-  if (e.googleEnabled === "false") return false;
   return true;
 }
 

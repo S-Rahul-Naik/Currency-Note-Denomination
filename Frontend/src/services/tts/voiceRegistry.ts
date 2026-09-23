@@ -8,7 +8,7 @@
  * Honesty rules (match requirement 27/28):
  *  - Every persona maps to a real provider voice id.
  *  - Gender shown in the UI comes from the provider's metadata at runtime
- *    (see GoogleCloudTTSProvider.getVoices), never invented here.
+ *    (see ElevenLabsTTSProvider.getVoices), never invented here.
  *  - If a voice id is not available in the configured account, the provider
  *    reports it as unavailable and the UI hides the card.
  *
@@ -16,8 +16,6 @@
  *  - ElevenLabs (PRIMARY AI provider): real public preset voice ids
  *    (Rachel/Bella/Domi/Elli female; Josh/Adam/Antoni/Arnold/Sam male).
  *    ElevenLabs v3 model can speak Kannada + 73 other languages.
- *  - Google Cloud (secondary AI): Chirp3-HD ids.
- *  - Device (fallback): browser speech synthesis.
  *
  * Kannada is first-class and the primary language of the voice system.
  */
@@ -49,8 +47,6 @@ export interface VoicePersona {
   languageCode: string;
   /** ElevenLabs public preset voice id (primary AI engine). */
   elevenVoiceId: string;
-  /** Google Cloud voice id (secondary AI engine). */
-  googleVoiceId: string;
   /** Provider metadata gender for the ElevenLabs preset. */
   elevenGender: "female" | "male";
   /** Native sample text (Kannada stays in script — never romanized). */
@@ -78,7 +74,7 @@ export const VOICE_LANGUAGES: VoiceLanguage[] = [
 /* ------------------------------------------------------------------ */
 // A custom Voice Design voice is permitted through the ElevenLabs Free-plan
 // API. It is shared across personas until additional custom voices are added.
-const DHANDRISHTI_MULTILINGUAL_VOICE = "WAeWgS3tOvE1YclFTZSA";
+const DHANDRISHTI_MULTILINGUAL_VOICE = "EzhablsL0xEKkPib1e6R";
 
 const ELEVEN = {
   Rachel: DHANDRISHTI_MULTILINGUAL_VOICE,
@@ -140,17 +136,6 @@ const SAMPLES: Record<string, { female: string; male: string }> = {
   },
 };
 
-/** Google Cloud voice id per gender per language (secondary AI engine). */
-const GOOGLE: Record<string, { female: string; male: string }> = {
-  kn: { female: "kn-IN-Chirp3-HD-Achernar", male: "kn-IN-Chirp3-HD-Autonoe" },
-  en: { female: "en-IN-Wavenet-A", male: "en-IN-Wavenet-B" },
-  hi: { female: "hi-IN-Wavenet-A", male: "hi-IN-Wavenet-B" },
-  te: { female: "te-IN-Wavenet-A", male: "te-IN-Wavenet-B" },
-  ta: { female: "ta-IN-Wavenet-A", male: "ta-IN-Wavenet-B" },
-  ml: { female: "ml-IN-Wavenet-A", male: "ml-IN-Wavenet-B" },
-  mr: { female: "mr-IN-Wavenet-A", male: "mr-IN-Wavenet-B" },
-};
-
 /* ------------------------------------------------------------------ */
 /* Persona constructor                                                 */
 /* ------------------------------------------------------------------ */
@@ -175,7 +160,6 @@ function p(
     languageBase,
     languageCode: lang.code,
     elevenVoiceId: ELEVEN[eleven],
-    googleVoiceId: GOOGLE[languageBase][gender],
     elevenGender: gender,
     sampleText: gender === "female" ? sample.female : sample.male,
     featured,
@@ -250,12 +234,9 @@ export function getPersonasForLanguage(base: string): VoicePersona[] {
   return VOICE_PERSONAS.filter((v) => v.languageBase === base);
 }
 
-/** Resolve the provider voice id for a persona on a given engine. */
-export function getProviderVoiceId(
-  persona: VoicePersona,
-  provider: "elevenlabs" | "google",
-): string {
-  return provider === "elevenlabs" ? persona.elevenVoiceId : persona.googleVoiceId;
+/** Resolve the ElevenLabs voice id for a persona. */
+export function getProviderVoiceId(persona: VoicePersona): string {
+  return persona.elevenVoiceId;
 }
 
 export function personaToProviderVoice(persona: VoicePersona): ProviderVoice {

@@ -23,7 +23,6 @@ import {
 } from "@/services/tts/voiceRegistry";
 import { ttsManager } from "@/services/tts/TTSManager";
 import type { ProviderStatus, SpeechStatus, TTSRequest } from "@/services/tts/types";
-import { getDeviceHasLanguage } from "@/services/tts/managerHelpers";
 
 export interface SelectedPersona {
   id: string;
@@ -38,7 +37,6 @@ export interface SelectedPersona {
 
 export interface VoiceContextValue {
   supported: boolean;
-  engineVoiceCount: number;
   /** Provider / AI vs device status for the UI. */
   providerStatus: ProviderStatus;
   speechStatus: SpeechStatus;
@@ -54,7 +52,7 @@ export interface VoiceContextValue {
   setVoice: (id: string) => void;
   setLanguage: (base: string) => void;
   /** Speak arbitrary text using the selected voice (native text). */
-  speak: (text: string, tone?: VoiceTone) => Promise<void>;
+  speak: (text: string, tone?: VoiceTone, lang?: string) => Promise<void>;
   speakResult: (text: string, tone?: VoiceTone, lang?: string) => Promise<void>;
   /** Preview a persona with a native sample. */
   previewVoice: (id?: string) => void;
@@ -69,8 +67,6 @@ const VoiceContext = createContext<VoiceContextValue | null>(null);
 function buildSelectedVoice(voiceId: string | null, settings: VoiceSettings): SelectedPersona {
   const persona = getPersona(voiceId ?? settings.voiceId);
   const lang = getLanguages().find((l) => l.base === persona.languageBase);
-  const active = ttsManager.getActiveProviderId();
-  const providerId = active === "browser" ? "elevenlabs" : active;
   return {
     id: persona.id,
     name: persona.name,
@@ -78,14 +74,13 @@ function buildSelectedVoice(voiceId: string | null, settings: VoiceSettings): Se
     gender: persona.gender,
     lang: persona.languageCode,
     personality: persona.personality,
-    providerVoiceId: getProviderVoiceId(persona, providerId),
+    providerVoiceId: getProviderVoiceId(persona),
     sampleText: persona.sampleText,
   };
 }
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
   const { preferences, updatePreferences } = useApp();
-  const [engineVoiceCount, setEngineCount] = useState(0);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus>(
     ttsManager.getProviderStatus(),
   );
@@ -104,19 +99,6 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       offProvider();
       offStatus();
     };
-  }, []);
-
-  useEffect(() => {
-    const count = () => {
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        setEngineCount(window.speechSynthesis.getVoices().length);
-      }
-    };
-    count();
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.addEventListener("voiceschanged", count);
-      return () => window.speechSynthesis.removeEventListener("voiceschanged", count);
-    }
   }, []);
 
   const setSettings = useCallback(
@@ -150,13 +132,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const buildRequest = useCallback((text: string, tone: VoiceTone, langOverride?: string): TTSRequest => {
     const s = settingsRef.current;
     const persona = getPersona(s.voiceId);
-    const active = ttsManager.getActiveProviderId();
-    const providerId = active === "browser" ? "elevenlabs" : active;
     return {
       text,
       language: langOverride ?? s.language ?? persona.languageCode,
       voiceId: persona.id,
-      providerVoiceId: getProviderVoiceId(persona, providerId),
+      providerVoiceId: getProviderVoiceId(persona),
       speed: s.speed,
       pitch: s.pitch,
       volume: s.volume,
@@ -165,8 +145,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const speak = useCallback(
-    (text: string, tone: VoiceTone = "normal") => {
-      return ttsManager.speak(buildRequest(text, tone));
+    (text: string, tone: VoiceTone = "normal", langOverride?: string) => {
+      return ttsManager.speak(buildRequest(text, tone, langOverride));
     },
     [buildRequest],
   );
@@ -176,9 +156,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       const s = settingsRef.current;
       // Results from individual pages must honour the language chosen in
       // Settings, rather than a page-specific detection-language override.
-      const playback = ttsManager.speak(buildRequest(text, tone));
+      const playback = ttsManager.speak(buildRequest(text, tone, _langOverride));
       if (s.repeatResult) {
-        window.setTimeout(() => void ttsManager.speak(buildRequest(text, tone)), 1600);
+        window.setTimeout(() => void ttsManager.speak(buildRequest(text, tone, _langOverride)), 1600);
       }
       if (s.vibration) {
         try {
@@ -228,8 +208,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   const value: VoiceContextValue = useMemo(
     () => ({
-      supported: typeof window !== "undefined" && "speechSynthesis" in window,
-      engineVoiceCount,
+      supported: providerStatus.available,
       providerStatus,
       speechStatus,
       isSpeaking,
@@ -248,10 +227,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       previewingVoiceId,
       stop,
       testVoice,
-      hasKannadaEngineVoice: getDeviceHasLanguage("kn-IN"),
+      hasKannadaEngineVoice: false,
     }),
     [
-      engineVoiceCount,
       providerStatus,
       speechStatus,
       isSpeaking,

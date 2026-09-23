@@ -4,6 +4,9 @@ import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
 import { AuthShell } from "@/components/feature/AuthShell";
 import { Button } from "@/components/base/Button";
 import { InputField } from "@/components/base/InputField";
+import { useApp } from "@/context/AppProvider";
+import { getLanguages, getPersonasForLanguage } from "@/services/tts/voiceRegistry";
+import type { CurrencyCode } from "@/constants/currencies";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,8 +15,9 @@ export default function Login() {
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { preferences, updatePreferences, switchUser } = useApp();
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
     if (!email || !password) {
@@ -21,10 +25,36 @@ export default function Login() {
       return;
     }
     setLoading(true);
-    window.setTimeout(() => {
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = (await response.json()) as { error?: string; name?: string; email?: string; phone?: string; language?: string; conversionCurrency?: CurrencyCode };
+      if (!response.ok) {
+        setError(data.error ?? "Unable to log in.");
+        return;
+      }
+      window.localStorage.setItem("dd_user", JSON.stringify({ name: data.name, email: data.email, phone: data.phone }));
+      switchUser(data.email ?? email);
+      const language = getLanguages().find((item) => item.code === data.language) ?? getLanguages()[0];
+      const persona = getPersonasForLanguage(language.base).find((item) => item.gender === "female");
+      updatePreferences({
+        conversionCurrency: data.conversionCurrency ?? preferences.conversionCurrency,
+        voice: {
+          ...preferences.voice,
+          language: language.code,
+          voiceId: persona?.id ?? preferences.voice.voiceId,
+        },
+      });
       setLoading(false);
-      navigate("/preferences/currency");
-    }, 700);
+      navigate("/home");
+    } catch {
+      setError("Could not connect to the local account server.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -103,9 +133,9 @@ export default function Login() {
           <span className="h-px flex-1 bg-background-200" />
         </div>
 
-        <Button variant="outline" size="lg" fullWidth>
+        {/* <Button variant="outline" size="lg" fullWidth>
           Continue with Google
-        </Button>
+        </Button> */}
       </form>
     </AuthShell>
   );

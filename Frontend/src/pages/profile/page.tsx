@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   UserRound,
@@ -19,6 +20,12 @@ interface UserRowProps {
   value: string;
 }
 
+interface ProfileData {
+  name: string;
+  email: string;
+  phone: string;
+}
+
 function UserRow({ icon, label, value }: UserRowProps) {
   return (
     <div className="flex items-center gap-3.5">
@@ -36,6 +43,27 @@ function UserRow({ icon, label, value }: UserRowProps) {
 export default function Profile() {
   const navigate = useNavigate();
   const { preferences } = useApp();
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      const session = JSON.parse(window.localStorage.getItem("dd_user") ?? "null") as { email?: string } | null;
+      if (!session?.email) return;
+      void fetch(`/api/auth/profile?email=${encodeURIComponent(session.email)}`)
+        .then(async (response) => {
+          if (!response.ok) return null;
+          return (await response.json()) as ProfileData;
+        })
+        .then((data) => {
+          if (!cancelled && data) setProfile(data);
+        })
+        .catch(() => undefined);
+    } catch {
+      /* Ignore unavailable or malformed local session data. */
+    }
+    return () => { cancelled = true; };
+  }, []);
 
   const detection = getCurrency(preferences.detectionCurrency);
   const conversion = getCurrency(preferences.conversionCurrency);
@@ -59,7 +87,7 @@ export default function Profile() {
           >
             DD
           </span>
-          <p className="mt-4 font-heading text-xl font-bold text-foreground-950">Dhan User</p>
+          <p className="mt-4 font-heading text-xl font-bold text-foreground-950">{profile?.name ?? "Dhan User"}</p>
           <p className="text-sm text-foreground-600">Member</p>
           <span className="mt-3 flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-xs font-bold text-primary-700 ring-1 ring-primary-200">
             <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5" />
@@ -72,17 +100,17 @@ export default function Profile() {
             <UserRow
               icon={<UserRound aria-hidden="true" className="h-4 w-4" />}
               label="Name"
-              value="Dhan User"
+              value={profile?.name ?? "Loading…"}
             />
             <UserRow
               icon={<Mail aria-hidden="true" className="h-4 w-4" />}
               label="Email"
-              value="dhan@example.com"
+              value={profile?.email ?? "Loading…"}
             />
             <UserRow
               icon={<Phone aria-hidden="true" className="h-4 w-4" />}
               label="Phone"
-              value="+91 98765 43210"
+              value={profile?.phone ?? "Loading…"}
             />
           </Card>
 
@@ -108,9 +136,9 @@ export default function Profile() {
             <Button variant="outline" size="lg" fullWidth onClick={() => navigate("/settings")}>
               Edit Settings
             </Button>
-            <Button variant="ghost" size="lg" fullWidth onClick={() => navigate("/admin")}>
+            {/* <Button variant="ghost" size="lg" fullWidth onClick={() => navigate("/admin")}>
               Admin Dashboard
-            </Button>
+            </Button> */}
           </div>
         </div>
       </div>

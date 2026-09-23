@@ -16,7 +16,7 @@ import { PageHeader } from "@/components/base/PageHeader";
 import { Card } from "@/components/base/Card";
 import { Button } from "@/components/base/Button";
 import { getCurrency, formatAmount } from "@/constants/currencies";
-import { MOCK_HISTORY } from "@/mocks/history";
+import { useApp } from "@/context/AppProvider";
 import type { DetectionRecord, DetectionStatus, CounterfeitVerdict } from "@/types";
 
 type FilterKind = "all" | DetectionStatus | "counterfeit_check";
@@ -43,7 +43,7 @@ const VERDICT_META: Record<CounterfeitVerdict, { Icon: typeof ShieldCheck; bg: s
 export default function History() {
   const [filter, setFilter] = useState<FilterKind>("all");
   const [selected, setSelected] = useState<DetectionRecord | null>(null);
-  const [items, setItems] = useState<DetectionRecord[]>(MOCK_HISTORY);
+  const { history: items, clearHistory, removeHistoryRecord } = useApp();
 
   const filtered = useMemo(() => {
     if (filter === "all") return items;
@@ -51,9 +51,9 @@ export default function History() {
     return items.filter((i) => i.status === filter && i.source !== "counterfeit_check");
   }, [filter, items]);
 
-  const clearAll = () => { setItems([]); setSelected(null); };
+  const clearAll = () => { clearHistory(); setSelected(null); };
   const removeOne = (id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
+    removeHistoryRecord(id);
     if (selected?.id === id) setSelected(null);
   };
 
@@ -193,14 +193,14 @@ function HistoryRow({ item, onOpen }: { item: DetectionRecord; onOpen: () => voi
         </button>
 
         {/* Security guide shortcut */}
-        <button
+        {/* <button
           onClick={() => navigate(`/denomination/${item.currency}/${item.denomination}`)}
           aria-label={`View security guide for ${formatAmount(item.currency, item.denomination)}`}
           className="flex w-full cursor-pointer items-center gap-2 border-t border-background-100 px-4 py-2.5 text-left transition-colors hover:bg-background-100"
         >
           <BookOpen aria-hidden="true" className="h-3.5 w-3.5 text-primary-600" />
           <span className="text-xs font-semibold text-primary-700">View security features guide</span>
-        </button>
+        </button> */}
       </div>
     </li>
   );

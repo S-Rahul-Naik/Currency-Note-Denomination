@@ -3,8 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import {
   ArrowRightLeft,
   Volume2,
-  Wifi,
-  WifiOff,
 } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { PageHeader } from "@/components/base/PageHeader";
@@ -17,12 +15,13 @@ import {
   getCurrency,
   formatAmount,
 } from "@/constants/currencies";
-import { convert, convertLive, speakConversion, type ConversionResult } from "@/services/converter/convertService";
+import { convert, convertLive, type ConversionResult } from "@/services/converter/convertService";
+import { buildConversionSpeechForVoice } from "@/services/inference/resultSpeech";
 
 export default function Convert() {
   const [searchParams] = useSearchParams();
-  const { preferences, updatePreferences } = useApp();
-  const { speakResult } = useVoice();
+  const { preferences } = useApp();
+  const { speakResult, settings } = useVoice();
 
   const [fromCode, setFromCode] = useState<string>(searchParams.get("from") ?? preferences.detectionCurrency);
   const [toCode, setToCode] = useState<string>(preferences.conversionCurrency);
@@ -42,13 +41,6 @@ export default function Convert() {
     return () => { cancelled = true; };
   }, [from, numericAmount, to]);
 
-  const sourceLabel =
-    result.source === "online"
-      ? "Online"
-      : result.source === "cached"
-        ? "Cached"
-        : "Offline";
-
   const swap = () => {
     setFromCode(toCode);
     setToCode(fromCode);
@@ -56,7 +48,7 @@ export default function Convert() {
 
   const handleSpeak = () => {
     speakResult(
-      speakConversion(from, numericAmount, to, result.amount),
+      buildConversionSpeechForVoice(from.code, numericAmount, to.code, result.amount, settings.language).text,
       "confirmation",
     );
   };
@@ -99,28 +91,6 @@ export default function Convert() {
             <span className="text-sm font-bold">Swap</span>
           </button>
 
-          <div className="mt-5 flex items-center justify-between rounded-xl bg-background-100 px-4 py-3">
-            <span className="text-xs text-foreground-600">Exchange rate</span>
-            <span className="flex items-center gap-2">
-              <span
-                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                  result.source === "online"
-                    ? "bg-primary-50 text-primary-700 ring-1 ring-primary-200"
-                    : "bg-background-50 text-foreground-600 ring-1 ring-background-200"
-                }`}
-              >
-                {result.source === "online" ? (
-                  <Wifi aria-hidden="true" className="h-3 w-3" />
-                ) : (
-                  <WifiOff aria-hidden="true" className="h-3 w-3" />
-                )}
-                {sourceLabel}
-              </span>
-              <span className="text-sm font-bold text-foreground-950">
-                1 {from.code} = {result.rate.toFixed(4)} {to.code}
-              </span>
-            </span>
-          </div>
         </Card>
 
         <div className="mt-5 lg:mt-0">
@@ -143,12 +113,6 @@ export default function Convert() {
               Speak Result
             </Button>
 
-            <button
-              onClick={() => updatePreferences({ conversionCurrency: toCode as never })}
-              className="mt-3 w-full cursor-pointer rounded-xl border border-background-300 px-4 py-3 text-sm font-bold text-primary-700 transition-colors hover:bg-background-100"
-            >
-              Set {to.code} as default conversion currency
-            </button>
           </Card>
         </div>
       </div>

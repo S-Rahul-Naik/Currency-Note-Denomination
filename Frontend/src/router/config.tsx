@@ -4,6 +4,7 @@ import Splash from "../pages/splash/page";
 import Onboarding from "../pages/onboarding/page";
 import Login from "../pages/auth/login/page";
 import Signup from "../pages/auth/signup/page";
+import AuthChoice from "../pages/auth/choice/page";
 import CurrencyPreference from "../pages/preferences/currency/page";
 import DenominationPreference from "../pages/preferences/denomination/page";
 import Home from "../pages/home/page";
@@ -26,6 +27,10 @@ const routes: RouteObject[] = [
   {
     path: "/onboarding",
     element: <Onboarding />,
+  },
+  {
+    path: "/account",
+    element: <AuthChoice />,
   },
   {
     path: "/login",

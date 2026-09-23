@@ -19,9 +19,8 @@ import { Card } from "@/components/base/Card";
 import { useApp } from "@/context/AppProvider";
 import { useVoice } from "@/context/VoiceProvider";
 import { getCurrency, formatAmount } from "@/constants/currencies";
-import { buildResultSpeechForVoice } from "@/services/inference/resultSpeech";
-import { convertLive, speakConversion } from "@/services/converter/convertService";
-import { isNoCommand, isYesCommand, listenForVoiceCommand, parseCurrencyCommand } from "@/services/voice/voiceCommands";
+import { buildConversionSpeechForVoice, buildResultSpeechForVoice } from "@/services/inference/resultSpeech";
+import { convertLive } from "@/services/converter/convertService";
 import type { DetectionResult, DetectedNote, VoiceTone } from "@/types";
 
 function toneFor(result: DetectionResult): VoiceTone {
@@ -53,46 +52,31 @@ export default function Result() {
     if (!note || result.status !== "success" || !settings.autoSpeak) return;
 
     let cancelled = false;
-    const runVoiceConversion = async () => {
-      const noteCurrency = getCurrency(note.currency);
+    const announceResult = async () => {
       const announcement = buildResultSpeechForVoice(result, settings.language, hasKannadaEngineVoice, settings.romanizedFallback);
-      await speak(announcement.text, toneFor(result));
+      const targetCode = preferences.conversionCurrency;
+      const conversionPromise = convertLive({
+        from: getCurrency(note.currency),
+        amount: note.denomination,
+        to: getCurrency(targetCode),
+      });
+      await speak(announcement.text, toneFor(result), announcement.lang);
+      const conversion = await conversionPromise;
       if (cancelled) return;
-      await new Promise((resolve) => window.setTimeout(resolve, 2600));
-      if (cancelled) return;
-      await speak(`Would you like to convert ${noteCurrency.name} ${noteCurrency.symbol}${note.denomination}? Please say yes or no.`, "confirmation");
-      let answer = await listenForVoiceCommand(settings.language, 15000);
-      if (!isYesCommand(answer) && !isNoCommand(answer) && !cancelled) {
-        await speak("I am listening now. Please say yes or no.", "normal");
-        answer = await listenForVoiceCommand(settings.language, 15000);
-      }
-      if (cancelled || isNoCommand(answer)) return;
-      if (!isYesCommand(answer)) {
-        speak("I did not hear a yes. You can say convert when you are ready.", "warning");
-        return;
-      }
-
-      await speak("Which currency should I convert it to? For example, say dollars, euros, rupees, Australian dollars, Canadian dollars, or pesos.", "normal");
-      let targetCommand = await listenForVoiceCommand(settings.language, 15000);
-      if (!parseCurrencyCommand(targetCommand) && !cancelled) {
-        await speak("I am listening now. Please say the target currency name.", "normal");
-        targetCommand = await listenForVoiceCommand(settings.language, 15000);
-      }
-      const targetCode = parseCurrencyCommand(targetCommand);
-      if (cancelled) return;
-      if (!targetCode || targetCode === note.currency) {
-        await speak(targetCode === note.currency ? "That is already the detected currency." : "I could not identify that currency. Please try again.", "warning");
-        return;
-      }
-
-      const from = getCurrency(note.currency);
-      const to = getCurrency(targetCode);
-      const conversion = await convertLive({ from, amount: note.denomination, to });
-      await speak(speakConversion(from, note.denomination, to, conversion.amount), "confirmation");
+      const conversionSpeech = buildConversionSpeechForVoice(
+        note.currency,
+        note.denomination,
+        targetCode,
+        conversion.amount,
+        settings.language,
+      );
+      await speak(conversionSpeech.text, "confirmation", conversionSpeech.lang);
     };
-    void runVoiceConversion();
-    return () => { cancelled = true; };
-  }, [hasKannadaEngineVoice, result, settings.autoSpeak, settings.language, settings.romanizedFallback, speak, speakResult]);
+    void announceResult();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasKannadaEngineVoice, preferences.conversionCurrency, result, settings.autoSpeak, settings.language, settings.romanizedFallback, speak]);
 
   const handleSpeak = () => {
     if (isSpeaking) stop();

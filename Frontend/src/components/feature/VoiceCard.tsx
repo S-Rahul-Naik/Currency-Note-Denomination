@@ -104,7 +104,7 @@ export function VoiceCard({
         ) : (
           <span className="inline-flex items-center gap-1 rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-semibold text-accent-800 ring-1 ring-accent-200">
             <Volume2 aria-hidden="true" className="h-3 w-3" />
-            Device voice
+            Unavailable
           </span>
         )}
       </div>

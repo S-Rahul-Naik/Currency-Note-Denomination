@@ -22,10 +22,11 @@ import { PageHeader } from "@/components/base/PageHeader";
 import { VoiceStudio } from "@/components/feature/VoiceStudio";
 import { useApp } from "@/context/AppProvider";
 import { useVoice } from "@/context/VoiceProvider";
+import { SUPPORTED_CURRENCIES, type CurrencyCode } from "@/constants/currencies";
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { preferences, updatePreferences, resetPreferences } = useApp();
+  const { preferences, updatePreferences, clearHistory } = useApp();
   const { settings, setSettings } = useVoice();
 
   const [confirmClear, setConfirmClear] = useState(false);
@@ -151,6 +152,24 @@ export default function Settings() {
                 checked={preferences.offlineModel}
                 onChange={(v) => updatePreferences({ offlineModel: v })}
               />
+              <div className="space-y-2 px-4 py-4">
+                <label htmlFor="default-converter-currency" className="block text-sm font-bold text-foreground-950">
+                  Default converter currency
+                </label>
+                <p className="text-xs text-foreground-600">Choose the currency used as the default conversion target.</p>
+                <select
+                  id="default-converter-currency"
+                  value={preferences.conversionCurrency}
+                  onChange={(event) => updatePreferences({ conversionCurrency: event.target.value as CurrencyCode })}
+                  className="h-11 w-full cursor-pointer rounded-xl border border-background-300 bg-background-50 px-3 text-sm font-semibold text-foreground-950 focus:border-primary-400 focus:outline-3 focus:outline-primary-400"
+                >
+                  {SUPPORTED_CURRENCIES.map((currency) => (
+                    <option key={currency.code} value={currency.code}>
+                      {currency.code} - {currency.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="space-y-2.5 pt-3">
                 {linkRow(
                   "/preferences/currency",
@@ -218,7 +237,7 @@ export default function Settings() {
           onCancel={() => setConfirmClear(false)}
           onConfirm={() => {
             setConfirmClear(false);
-            resetPreferences();
+            clearHistory();
             navigate("/history");
           }}
         />

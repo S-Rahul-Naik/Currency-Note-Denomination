@@ -1,17 +1,35 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Volume2 } from "lucide-react";
 import { BrandMark } from "@/components/base/BrandMark";
 import { useVoice } from "@/context/VoiceProvider";
+import { voiceMessage } from "@/services/voice/voiceMessages";
+
+let mediaPermissionRequest: Promise<void> | null = null;
+
+function requestMediaPermissions(): Promise<void> {
+  if (mediaPermissionRequest) return mediaPermissionRequest;
+
+  mediaPermissionRequest = (async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      stream.getTracks().forEach((track) => track.stop());
+    } catch {
+      // The app can still open; individual pages will show their own camera or mic state.
+    }
+  })();
+
+  return mediaPermissionRequest;
+}
 
 export default function Splash() {
   const navigate = useNavigate();
   const { speak, settings } = useVoice();
+  const welcomeMessage = voiceMessage("welcome", settings.language);
+  const completedRef = useRef(false);
 
   useEffect(() => {
-    if (settings.autoSpeak) {
-      speak("Welcome to DhanDrishti. Smart currency recognition. See money, hear money.", "confirmation");
-    }
     if (settings.vibration) {
       try {
         navigator.vibrate?.([80, 60, 80]);
@@ -19,10 +37,20 @@ export default function Splash() {
         /* ignore */
       }
     }
-    const t = window.setTimeout(() => navigate("/onboarding"), 2800);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigate]);
+    let cancelled = false;
+    const playWelcomeAndContinue = async () => {
+      await requestMediaPermissions();
+      await speak(welcomeMessage, "confirmation", settings.language);
+      if (!cancelled && !completedRef.current) {
+        completedRef.current = true;
+        navigate("/login");
+      }
+    };
+    void playWelcomeAndContinue();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, settings.vibration, speak, welcomeMessage]);
 
   return (
     <div className="app-bg app-bg-dark relative mx-auto flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center">

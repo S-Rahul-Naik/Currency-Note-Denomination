@@ -4,11 +4,7 @@ import {
   Pause,
   Volume2,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
   Mic,
-  Bot,
-  Info,
 } from "lucide-react";
 import { useVoice } from "@/context/VoiceProvider";
 import { WaveformBars } from "@/components/feature/WaveformBars";
@@ -26,15 +22,8 @@ export function VoiceStudio() {
     previewVoice,
     stop,
     isSpeaking,
-    providerStatus,
-    usingAi,
-    engineVoiceCount,
-    supported,
-    hasKannadaEngineVoice,
     speechStatus,
   } = useVoice();
-
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const activeLang = languages.find((l) => l.base === selectedVoice.lang.split("-")[0]) ?? languages[0];
 
@@ -55,14 +44,6 @@ export function VoiceStudio() {
         lang={activeLang}
         isSpeaking={isSpeaking}
         onPreview={handleHeroPreview}
-      />
-
-      {/* ---------- Provider status ---------- */}
-      <ProviderBar
-        active={usingAi}
-        label={providerStatus.providerLabel}
-        message={providerStatus.message}
-        fallback={providerStatus.usingFallback}
       />
 
       {/* ---------- Language ---------- */}
@@ -92,11 +73,6 @@ export function VoiceStudio() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-900">
-        <p className="font-bold">One DhanDrishti female AI voice</p>
-        <p className="mt-1 text-primary-800">Your selected language is saved and used for speech across the app.</p>
-      </div>
-
       {/* ---------- Audio controls ---------- */}
       <AudioControls
         speed={settings.speed}
@@ -106,21 +82,7 @@ export function VoiceStudio() {
         pausePreview={isSpeaking ? stop : undefined}
       />
 
-      {/* ---------- Advanced ---------- */}
-      <AdvancedPanel
-        open={showAdvanced}
-        onToggle={() => setShowAdvanced((s) => !s)}
-        usingAi={usingAi}
-        providerLabel={providerStatus.providerLabel}
-        providerMessage={providerStatus.message}
-        providerFallback={providerStatus.usingFallback}
-        speechStatus={speechStatus}
-        engineVoiceCount={engineVoiceCount}
-        supported={supported}
-        hasKannadaEngineVoice={hasKannadaEngineVoice}
-        romanizedFallback={settings.romanizedFallback}
-        onRomanized={(v) => setSettings({ romanizedFallback: v })}
-      />
+      <p className="text-xs text-foreground-500">{speechStatus === "error" ? "Voice is temporarily unavailable." : "Your selected language is used across the app."}</p>
     </section>
   );
 }
@@ -186,48 +148,6 @@ function Hero({
           </div>
           <p className="min-w-0 flex-1 truncate text-xs text-primary-100/80">{persona.sampleText}</p>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function ProviderBar({
-  active,
-  label,
-  message,
-  fallback,
-}: {
-  active: boolean;
-  label: string;
-  message: string;
-  fallback: boolean;
-}) {
-  return (
-    <div
-      className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
-        active ? "border-primary-200 bg-primary-50" : "border-accent-200 bg-accent-50"
-      }`}
-    >
-      <span
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-          active ? "bg-primary-600 text-background-50" : "bg-accent-500 text-foreground-950"
-        }`}
-      >
-        {active ? <Bot aria-hidden="true" className="h-5 w-5" /> : <Volume2 aria-hidden="true" className="h-5 w-5" />}
-      </span>
-      <div className="min-w-0">
-        <p className="text-xs font-bold text-foreground-950">
-          {label}
-          <span className="ml-2 font-semibold text-foreground-500">
-            {active ? "AI voice" : "Device fallback"}
-          </span>
-        </p>
-        <p className="truncate text-xs text-foreground-600">{message}</p>
-        {!active && fallback && (
-          <p className="mt-0.5 text-xs font-medium text-accent-800">
-            Connect an AI voice provider for truly separate voices.
-          </p>
-        )}
       </div>
     </div>
   );
@@ -339,105 +259,3 @@ function AudioControls({
   );
 }
 
-function AdvancedPanel({
-  open,
-  onToggle,
-  usingAi,
-  providerLabel,
-  providerMessage,
-  providerFallback,
-  speechStatus,
-  engineVoiceCount,
-  supported,
-  hasKannadaEngineVoice,
-  romanizedFallback,
-  onRomanized,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  usingAi: boolean;
-  providerLabel: string;
-  providerMessage: string;
-  providerFallback: boolean;
-  speechStatus: string;
-  engineVoiceCount: number;
-  supported: boolean;
-  hasKannadaEngineVoice: boolean;
-  romanizedFallback: boolean;
-  onRomanized: (v: boolean) => void;
-}) {
-  return (
-    <div className="surface rounded-2xl">
-      <button
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full cursor-pointer items-center justify-between px-5 py-4 text-left"
-      >
-        <span className="flex items-center gap-2 text-sm font-bold text-foreground-950">
-          <Info aria-hidden="true" className="h-4 w-4 text-primary-600" />
-          Provider status
-        </span>
-        {open ? (
-          <ChevronUp aria-hidden="true" className="h-4 w-4 text-foreground-500" />
-        ) : (
-          <ChevronDown aria-hidden="true" className="h-4 w-4 text-foreground-500" />
-        )}
-      </button>
-      {open && (
-        <div className="space-y-3 border-t border-background-200 px-5 py-4">
-          <StatRow label="Voice source" value={`${providerLabel} (${usingAi ? "AI" : "Device"})`} active={usingAi} />
-          <StatRow label="Engine status" value={supported ? `${engineVoiceCount} device voice(s) ready` : "Not supported"} />
-          <StatRow
-            label="Native Kannada engine"
-            value={hasKannadaEngineVoice ? "Available" : "Not installed"}
-          />
-          <StatRow label="Speech state" value={speechStatus} />
-          <StatRow label="Fallback active" value={providerFallback ? "Yes" : "No"} active={providerFallback} />
-          <div className="text-xs leading-relaxed text-foreground-600">
-            {providerMessage} Kannada text is always sent in native script to the AI provider; it is
-            never silently converted to English-style speech.
-          </div>
-
-          <label className="flex items-start gap-3 pt-1">
-            <input
-              type="checkbox"
-              checked={romanizedFallback}
-              onChange={(e) => onRomanized(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-primary-600"
-            />
-            <span className="text-xs">
-              <span className="font-bold text-foreground-900">Enable romanized Kannada fallback</span>
-              <span className="block text-foreground-600">
-                Only used when the device voice is active and cannot natively speak Kannada. Off by
-                default.
-              </span>
-            </span>
-          </label>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StatRow({
-  label,
-  value,
-  active,
-}: {
-  label: string;
-  value: string;
-  active?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-xs text-foreground-600">{label}</span>
-      <span
-        className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-          active ? "bg-primary-50 text-primary-700 ring-1 ring-primary-200" : "bg-background-100 text-foreground-700"
-        }`}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}

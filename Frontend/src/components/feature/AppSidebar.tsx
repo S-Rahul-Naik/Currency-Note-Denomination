@@ -128,7 +128,7 @@ export function AppSidebar() {
                 usingAi ? "text-primary-100" : providerStatus.usingFallback ? "text-accent-100" : "text-foreground-600"
               }`}
             >
-              {usingAi ? "AI Engine" : "Device Engine"}
+              {usingAi ? "AI Engine" : "Unavailable"}
             </p>
             <p
               className={`truncate text-sm font-bold ${

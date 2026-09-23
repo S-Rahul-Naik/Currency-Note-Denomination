@@ -4,15 +4,12 @@
  * The application never talks to a raw speech engine directly. It goes through
  * a provider abstraction. The active provider is decided by TTSManager:
  *
- *   Level 1 — primary AI TTS provider (Google Cloud TTS)
- *   Level 2 — secondary AI TTS provider (ElevenLabs, when configured)
- *   Level 3 — device / browser speech synthesis (honest fallback)
- *   Level 4 — friendly error state
+ *   ElevenLabs AI TTS is the only provider. Failures surface as an error.
  *
  * Providers are replaceable without touching UI code.
  */
 
-export type ProviderId = "google" | "elevenlabs" | "browser";
+export type ProviderId = "elevenlabs";
 export type ProviderKind = "ai" | "device";
 
 /** Fine-grained speech lifecycle, surfaced to the UI. */
@@ -44,7 +41,7 @@ export interface TTSRequest {
 }
 
 export interface TTSResult {
-  /** Audio URL (blob/data), or "" when produced by the device fallback. */
+  /** Audio URL returned by ElevenLabs. */
   audioUrl: string;
   provider: ProviderId;
   providerVoiceId: string;

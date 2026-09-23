@@ -1,4 +1,5 @@
 import type { DetectionResult } from "@/types";
+import type { CurrencyCode } from "@/constants/currencies";
 
 /**
  * Detection-result announcements — multilingual and native-first.
@@ -71,11 +72,11 @@ const MAPS: Record<string, PhraseMap> = {
   },
   kn: {
     low_confidence: (t) =>
-      `ಪತ್ತೆ ಖಚಿತವಾಗಿಲ್ಲ. ಬಹುಶಃ ${t.code} ${t.denom}, ಆದರೆ ವಿಶ್ವಾಸ ಕಡಿಮೆ. ಚೆನ್ನಾಗಿ ಬೆಳಕಿನಲ್ಲಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.`,
+      `ಪತ್ತೆ ಖಚಿತವಾಗಿಲ್ಲ. ಬಹುಶಃ ${knAmount(t.code, t.denom)}, ಆದರೆ ವಿಶ್ವಾಸ ಕಡಿಮೆ. ಚೆನ್ನಾಗಿ ಬೆಳಕಿನಲ್ಲಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.`,
     wrong_currency: () => "ಗಮನ. ಇದು ಬೇರೆ ಕರೆನ್ಸಿಯಾಗಿ ಕಾಣುತ್ತಿದೆ. ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ.",
     error: () => "ಕ್ಷಮಿಸಿ. ಕರೆನ್ಸಿ ಗುರುತಿಸುವಲ್ಲಿ ದೋಷವಾಗಿದೆ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     multiple: (t) => `${t.count} ನೋಟು ಪತ್ತೆಯಾಗಿವೆ. ಒಟ್ಟು ${t.code} ${t.total}.`,
-    single: (t) => `ಯಶಸ್ವಿ ಪತ್ತೆ. ${t.code} ${t.denom}. ${t.conf} ಶೇಕಡಾ ವಿಶ್ವಾಸ.`,
+    single: (t) => `ಯಶಸ್ವಿ ಪತ್ತೆ. ${knAmount(t.code, t.denom)} ಪತ್ತೆಯಾಗಿದೆ. ${t.conf} ಶೇಕಡಾ ವಿಶ್ವಾಸ.`,
     none: () => "ಯಾವುದೇ ಕರೆನ್ಸಿ ಪತ್ತೆಯಾಗಿಲ್ಲ.",
   },
   hi: {
@@ -138,7 +139,7 @@ const ROMAN_KN: PhraseMap = {
 export interface BuildSpeechOptions {
   /** Selected voice language code, e.g. "kn-IN". */
   lang: string;
-  /** Whether the device engine can natively speak Kannada. */
+  /** Whether a native Kannada voice is available. */
   hasKannadaEngine: boolean;
   /** User opted-in romanized Kannada fallback (device path only). */
   allowRomanized?: boolean;
@@ -178,4 +179,70 @@ function render(map: PhraseMap, t: Tokens): string {
 /** English-only announcement (kept for consumers needing plain text). */
 export function buildResultSpeech(result: DetectionResult): string {
   return buildResultSpeechForVoice(result, { lang: "en-IN", hasKannadaEngine: true }).text;
+}
+
+export function buildConversionSpeechForVoice(
+  from: CurrencyCode,
+  amount: number,
+  to: CurrencyCode,
+  convertedAmount: number,
+  lang: string,
+): ResultSpeechPieces {
+  const source = formatSpeechAmount(amount);
+  const converted = formatSpeechAmount(convertedAmount);
+  const base = (lang || "en-IN").toLowerCase().split("-")[0];
+  const phrases: Record<string, string> = {
+    en: `${source} ${from} equals ${converted} ${to}.`,
+    kn: `${knAmount(from, String(amount))} ಮೊತ್ತವು ${knAmount(to, formatSpeechAmount(convertedAmount))} ಗೆ ಸಮನಾಗಿದೆ.`,
+    hi: `${source} ${from} के बराबर ${converted} ${to} है।`,
+    te: `${source} ${from} కు ${converted} ${to} సమానం.`,
+    ta: `${source} ${from} என்பது ${converted} ${to} க்கு சமம்.`,
+    ml: `${source} ${from} എന്നത് ${converted} ${to} ന് തുല്യമാണ്.`,
+    mr: `${source} ${from} म्हणजे ${converted} ${to}.`,
+  };
+  return {
+    text: phrases[base] ?? phrases.en,
+    lang: base === "en" ? "en-IN" : `${base}-IN`,
+  };
+}
+
+function formatSpeechAmount(value: number): string {
+  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+const KN_CURRENCY_NAMES: Record<CurrencyCode, string> = {
+  INR: "ಭಾರತೀಯ ರೂಪಾಯಿ",
+  USD: "ಅಮೆರಿಕನ್ ಡಾಲರ್",
+  PHP: "ಫಿಲಿಪ್ಪೀನ್ಸ್ ಪೆಸೊ",
+  EUR: "ಯೂರೋ",
+  AUD: "ಆಸ್ಟ್ರೇಲಿಯನ್ ಡಾಲರ್",
+  CAD: "ಕೆನಡಿಯನ್ ಡಾಲರ್",
+};
+
+const KN_DIGITS = ["ಸೊನ್ನೆ", "ಒಂದು", "ಎರಡು", "ಮೂರು", "ನಾಲ್ಕು", "ಐದು", "ಆರು", "ಏಳು", "ಎಂಟು", "ಒಂಬತ್ತು"];
+const KN_SMALL_NUMBERS = [
+  "ಸೊನ್ನೆ", "ಒಂದು", "ಎರಡು", "ಮೂರು", "ನಾಲ್ಕು", "ಐದು", "ಆರು", "ಏಳು", "ಎಂಟು", "ಒಂಬತ್ತು",
+  "ಹತ್ತು", "ಹನ್ನೊಂದು", "ಹನ್ನೆರಡು", "ಹದಿಮೂರು", "ಹದಿನಾಲ್ಕು", "ಹದಿನೈದು", "ಹದಿನಾರು", "ಹದಿನೇಳು",
+  "ಹದಿನೆಂಟು", "ಹತ್ತೊಂಬತ್ತು",
+];
+
+function knAmount(code: string, value: string): string {
+  const numeric = Number(value.replace(/,/g, ""));
+  if (!Number.isFinite(numeric)) return `${KN_CURRENCY_NAMES[code as CurrencyCode] ?? code} ${value}`;
+  const whole = Math.floor(numeric);
+  const fraction = Math.round((numeric - whole) * 100);
+  const numberText = knNumber(whole) + (fraction ? ` ಪಾಯಿಂಟ್ ${String(fraction).split("").map((d) => KN_DIGITS[Number(d)]).join(" ")}` : "");
+  return `${numberText} ${KN_CURRENCY_NAMES[code as CurrencyCode] ?? code}`;
+}
+
+function knNumber(value: number): string {
+  if (value < 20) return KN_SMALL_NUMBERS[value] ?? String(value);
+  if (value < 100) {
+    const tens = ["", "", "ಇಪ್ಪತ್ತು", "ಮೂವತ್ತು", "ನಲವತ್ತು", "ಐವತ್ತು", "ಅರವತ್ತು", "ಎಪ್ಪತ್ತು", "ಎಂಬತ್ತು", "ತೊಂಬತ್ತು"];
+    return tens[Math.floor(value / 10)] + (value % 10 ? ` ${KN_DIGITS[value % 10]}` : "");
+  }
+  if (value < 1000) return `${KN_DIGITS[Math.floor(value / 100)]} ನೂರು${value % 100 ? ` ${knNumber(value % 100)}` : ""}`;
+  if (value < 100000) return `${knNumber(Math.floor(value / 1000))} ಸಾವಿರ${value % 1000 ? ` ${knNumber(value % 1000)}` : ""}`;
+  if (value < 10000000) return `${knNumber(Math.floor(value / 100000))} ಲಕ್ಷ${value % 100000 ? ` ${knNumber(value % 100000)}` : ""}`;
+  return String(value);
 }

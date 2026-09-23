@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useVoice } from "@/context/VoiceProvider";
 import { SUPPORTED_CURRENCIES } from "@/constants/currencies";
+import { onboardingMessage } from "@/services/voice/voiceMessages";
 
 interface Feature {
   id: string;
@@ -50,7 +51,7 @@ const FEATURES: Feature[] = [
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { speak, settings } = useVoice();
+  const { speak, settings, isSpeaking, stop } = useVoice();
   const [step, setStep] = useState(0);
   const total = FEATURES.length;
   const current = FEATURES[step];
@@ -58,14 +59,22 @@ export default function Onboarding() {
 
   useEffect(() => {
     if (settings.autoSpeak) {
-      speak(`${current.title}. ${current.description}`, "normal");
+      speak(onboardingMessage(current.id, settings.language), "normal", settings.language);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   const next = () => {
-    if (isLast) navigate("/login");
+    if (isLast) navigate("/preferences/currency");
     else setStep((s) => s + 1);
+  };
+
+  const playCurrent = () => {
+    if (isSpeaking) {
+      stop();
+      return;
+    }
+    void speak(onboardingMessage(current.id, settings.language), "normal", settings.language);
   };
 
   return (
@@ -95,7 +104,7 @@ export default function Onboarding() {
           ))}
         </div>
         <button
-          onClick={() => navigate("/login")}
+          onClick={() => navigate("/preferences/currency")}
           aria-label="Skip onboarding"
           className="h-9 cursor-pointer rounded-lg px-3 text-sm font-semibold text-foreground-600 transition-colors hover:bg-background-100 hover:text-foreground-900 active:bg-background-200"
         >
@@ -116,6 +125,16 @@ export default function Onboarding() {
           <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-foreground-700">
             {current.description}
           </p>
+          <button
+            type="button"
+            onClick={playCurrent}
+            aria-label={isSpeaking ? "Stop voice" : "Play this step aloud"}
+            title={isSpeaking ? "Stop voice" : "Play this step aloud"}
+            className="mx-auto mt-4 inline-flex h-10 items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-4 text-xs font-bold text-primary-800 transition-colors hover:bg-primary-100"
+          >
+            <Volume2 aria-hidden="true" className="h-4 w-4" />
+            {isSpeaking ? "Stop voice" : "Play aloud"}
+          </button>
         </div>
       </div>
 

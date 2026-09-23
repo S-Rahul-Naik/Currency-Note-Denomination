@@ -23,11 +23,70 @@ type SpeechWindow = Window & {
   webkitSpeechRecognition?: SpeechRecognitionConstructor;
 };
 
+export function startContinuousVoiceCommand(
+  language: string,
+  onCommand: (transcript: string) => void,
+): () => void {
+  const Recognition = (window as SpeechWindow).SpeechRecognition ?? (window as SpeechWindow).webkitSpeechRecognition;
+  if (!Recognition) return () => undefined;
+
+  let stopped = false;
+  let restartTimer: number | null = null;
+  let recognition: SpeechRecognitionLike | null = null;
+
+  const scheduleRestart = () => {
+    if (stopped || restartTimer !== null) return;
+    restartTimer = window.setTimeout(() => {
+      restartTimer = null;
+      startRecognition();
+    }, 500);
+  };
+
+  const startRecognition = () => {
+    if (stopped) return;
+    const next = new Recognition();
+    recognition = next;
+    next.lang = language || "en-IN";
+    next.continuous = true;
+    next.interimResults = true;
+    next.onresult = (event) => {
+      const transcript = Array.from({ length: event.results.length }, (_, index) =>
+        event.results[index]?.[0]?.transcript?.trim() ?? "",
+      ).filter(Boolean).join(" ");
+      if (transcript) onCommand(transcript);
+    };
+    next.onerror = (event) => {
+      if (event?.error === "not-allowed" || event?.error === "service-not-allowed") {
+        stopped = true;
+        return;
+      }
+      scheduleRestart();
+    };
+    next.onend = scheduleRestart;
+    try {
+      next.start();
+    } catch {
+      scheduleRestart();
+    }
+  };
+
+  // SpeechRecognition owns the microphone session. Opening a separate stream
+  // here can make Android Chrome report audio-capture errors.
+  startRecognition();
+
+  return () => {
+    stopped = true;
+    if (restartTimer !== null) window.clearTimeout(restartTimer);
+    recognition?.stop();
+    recognition = null;
+  };
+}
+
 export function listenForVoiceCommand(language: string, timeoutMs = 15000): Promise<string | null> {
   const Recognition = (window as SpeechWindow).SpeechRecognition ?? (window as SpeechWindow).webkitSpeechRecognition;
   return Recognition
     ? listenWithBrowserRecognition(Recognition, language, timeoutMs)
-    : listenWithElevenLabs(language, timeoutMs);
+    : listenOnceWithElevenLabs(language, timeoutMs);
 }
 
 function listenWithBrowserRecognition(
@@ -98,7 +157,7 @@ function listenWithBrowserRecognition(
   });
 }
 
-async function listenWithElevenLabs(language: string, timeoutMs: number): Promise<string | null> {
+export async function listenOnceWithElevenLabs(language: string, timeoutMs = 8000): Promise<string | null> {
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return null;
   let stream: MediaStream | null = null;
   try {
@@ -139,12 +198,15 @@ export function isNoCommand(value: string | null): boolean {
 export function isOpenScanCommand(value: string | null): boolean {
   if (!value) return false;
   const text = value.toLowerCase();
-  return /\b(scan|scanner|scanning)\b/.test(text) && /\b(open|start|begin|currency|money)\b/.test(text);
+  return /\b(hey|hello|hi)\b/.test(text)
+    && /\b(scan|scanner|scanning)\b/.test(text)
+    && /\b(open|start|begin|currency|money)\b/.test(text);
 }
 
 export function parseCurrencyCommand(value: string | null): CurrencyCode | null {
   if (!value) return null;
-  const text = value.toLowerCase();
+  const text = value.toLowerCase().replace(/[.,-]/g, " ").trim();
+  const compact = text.replace(/\s+/g, "");
   const matches: Array<[CurrencyCode, RegExp]> = [
     ["INR", /\b(inr|rupee|rupees|indian)\b/],
     ["USD", /\b(usd|dollar|dollars|us)\b/],
@@ -153,5 +215,25 @@ export function parseCurrencyCommand(value: string | null): CurrencyCode | null 
     ["AUD", /\b(aud|australian)\b/],
     ["CAD", /\b(cad|canadian)\b/],
   ];
-  return matches.find(([, pattern]) => pattern.test(text))?.[0] ?? null;
+  const direct = matches.find(([, pattern]) => pattern.test(text))?.[0];
+  if (direct) return direct;
+
+  const letters: Record<string, string> = {
+    a: "a", ay: "a", b: "b", bee: "b", c: "c", see: "c", d: "d", dee: "d",
+    e: "e", ee: "e", f: "f", ef: "f", g: "g", gee: "g", h: "h", aitch: "h",
+    i: "i", eye: "i", j: "j", jay: "j", k: "k", kay: "k", l: "l", el: "l",
+    m: "m", em: "m", n: "n", en: "n", o: "o", oh: "o", p: "p", pee: "p",
+    q: "q", cue: "q", r: "r", ar: "r", are: "r", s: "s", ess: "s", t: "t",
+    tee: "t", u: "u", you: "u", v: "v", vee: "v", w: "w", doubleyou: "w",
+    x: "x", ex: "x", y: "y", why: "y", z: "z", zee: "z", zed: "z",
+  };
+  const spokenLetters = text
+    .split(/\s+/)
+    .filter((word) => word !== "and")
+    .map((word) => letters[word])
+    .join("");
+  const normalized = spokenLetters || compact;
+  return (["INR", "USD", "PHP", "EUR", "AUD", "CAD"] as CurrencyCode[])
+    .find((code) => code.toLowerCase() === normalized)
+    ?? null;
 }

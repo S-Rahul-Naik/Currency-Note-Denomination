@@ -52,8 +52,8 @@ export class ElevenLabsTTSProvider implements TTSProvider {
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       // Keep the status code when the backend returns a JSON error.  The
-      // manager needs it to distinguish a temporary failure from a provider
-      // billing/quota denial before selecting the device fallback.
+      // manager needs it to distinguish a temporary failure from a
+      // billing/quota denial.
       throw new Error(`TTS request failed (${res.status})${body ? `: ${body}` : ""}`);
     }
     const data = (await res.json()) as {
